@@ -4,6 +4,10 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 
+// 注册 SVG Icon
+import 'virtual:svg-icons-register'
+
+
 const app = createApp(App)
 
 // 应用路由
