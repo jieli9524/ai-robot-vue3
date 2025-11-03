@@ -2,27 +2,29 @@
     <div class="h-screen max-w-3xl mx-auto relative">
         <!-- 聊天记录区域 -->
         <div class="overflow-y-auto pb-24 pt-4 px-4">
-             <!-- 用户提问消息（靠右） -->
-            <div class="flex justify-end mb-4">
-                <div class="quesiton-container">
-                    <p>你是谁</p>
-                </div>
-            </div>
-
-
-            <!-- 大模型回复消息（靠左） -->
-            <div class="flex mb-4">
-                <!-- 头像 -->
-                <div class="flex-shrink-0 mr-3">
-                    <div class="w-8 h-8 rounded-full flex items-center justify-center border border-gray-200">
-                       <SvgIcon name="deepseek-logo" customCss="w-5 h-5"></SvgIcon>
+             <!-- 遍历聊天记录 -->
+            <template v-for="(chat, index) in chatList" :key="index">
+                <!-- 用户提问消息（靠右） -->
+                <div v-if="chat.role === 'user'" class="flex justify-end mb-4">
+                    <div class="quesiton-container">
+                    <p>{{ chat.content }}</p>
                     </div>
                 </div>
-                <!-- 回复的内容 -->
-                <div class="p-1 max-w-[80%] mb-2 grow">
-                    <p>我是Ai Chat，一个智能AI助手！✨ 我可以帮你解答各种问题，无论是学习、工作，还是日常生活中的小困惑，都可以找我聊聊。有什么我可以帮你的吗？😊</p>
+
+                <!-- 大模型回复消息（靠左） -->
+                <div v-else class="flex mb-4">
+                    <!-- 头像 -->
+                    <div class="flex-shrink-0 mr-3">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center border border-gray-200">
+                            <SvgIcon name="deepseek-logo" customCss="w-5 h-5"></SvgIcon>
+                        </div>
+                    </div>
+                    <!-- 回复的内容 -->
+                    <div class="p-1 max-w-[80%] mb-2">
+                        <p>{{ chat.content }}</p>
+                    </div>
                 </div>
-            </div>
+            </template>
         </div>
 
         <!-- 提问输入框 -->
@@ -39,7 +41,9 @@
 
                 <!-- 发送按钮 -->
                 <div class="flex justify-end">
-                    <button class="flex items-center justify-center bg-[#4d6bfe] rounded-full w-8 h-8 border border-[#4d6bfe] hover:bg-[#3b5bef] transition-colors">
+                    <button 
+                    @click="sendMessage"
+                    class="flex items-center justify-center bg-[#4d6bfe] rounded-full w-8 h-8 border border-[#4d6bfe] hover:bg-[#3b5bef] transition-colors">
                         <SvgIcon name="up-arrow" customCss="w-5 h-5 text-white"></SvgIcon>
                     </button>
                 </div>
@@ -47,13 +51,15 @@
             <div class="flex items-center justify-center text-xs text-gray-400 mt-2">内容由 AI 生成，请仔细甄别</div>
         </div>
     </div>
-  </template>
+</template>
   
   <script setup>
   import SvgIcon from '@/components/SvgIcon.vue'
-  import { ref } from 'vue';
+  import { ref, onBeforeUnmount } from 'vue';
   // textarea 引用
   const textareaRef = ref(null);
+   // 用户输入的消息
+  const message = ref('');
 
     // 自动调整文本域高度
     const autoResize = () => {
@@ -63,6 +69,83 @@
             textarea.style.height = textarea.scrollHeight + 'px'; // 2. 再设置为内容的实际高度
         } 
     };
+
+  // 聊天记录 (给个默认的问候语)
+    const chatList = ref([
+    { role: 'assistant', content: '我是智能 AI 助手！有什么我可以帮你的吗？😊' }
+    ])
+
+    
+    // SSE 连接
+    let eventSource = null;
+
+    // 发送消息
+    const sendMessage = async () => {
+        // 校验发送的消息不能为空
+        if (!message.value.trim()) return
+
+        // 将用户发送的消息添加到 chatList 聊天列表中
+        const userMessage = message.value.trim()
+        chatList.value.push({ role: 'user', content: userMessage })
+
+        // 点击发送按钮后，清空输入框
+        message.value = ''
+        // 将输入框的高度重置
+        if (textareaRef.value) {
+            textareaRef.value.style.height = 'auto'
+        }
+
+        // 添加一个占位的回复消息
+        chatList.value.push({ role: 'assistant', content: '' })
+
+        try {
+            eventSource = new EventSource(`http://localhost:8080/v2/ai/generateStream?message=${encodeURIComponent(userMessage)}&chatId=1`)
+            // 处理消息事件
+            let responseText = ''
+            
+            eventSource.onmessage = (event) => {
+            console.log('接收到数据: ', event.data)
+            if (event.data) { // 若响应数据不为空
+                    // 持续追加流式回答
+                    responseText += event.data;
+                    
+                    // 更新最后一条消息
+                    chatList.value[chatList.value.length - 1].content = responseText;
+                }
+            }
+
+            // 处理错误
+            eventSource.onerror = (error) => {
+                // 通常 SSE 在完成传输后会触发一次 error 事件，这是正常的
+                if (error.eventPhase === EventSource.CLOSED) {
+                    console.log('SSE正常关闭')
+                } else {
+                    // 提示用户 “请求出错”
+                    chatList.value[chatList.value.length - 1].content = '请求ai出错了，请稍后重试。'
+                }
+                
+                // 关闭 SSE
+                closeSSE()
+            }
+        } catch (error) {
+            console.error('发送消息错误: ', error)
+            // 提示用户 “请求出错”
+            chatList.value[chatList.value.length - 1].content = '抱歉，程序出错了，请稍后重试。';
+        }
+    }
+
+    // 关闭 SSE 连接
+    const closeSSE = () => {
+    if (eventSource) {
+        eventSource.close()
+        eventSource = null
+    }
+    }
+
+    // 组件卸载时自动关闭连接
+    onBeforeUnmount(() => {
+    closeSSE()
+    })
   </script>
   
   <style scoped>
@@ -80,4 +163,3 @@
     position: relative;
   }
   </style>
-  
