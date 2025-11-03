@@ -3,6 +3,8 @@
     <h1 class="text-3xl font-bold bg-yellow-500">
       实战专栏!
     </h1>
+    <a-button type="primary">开始学习</a-button>
+
   </div>
 </template>
 
