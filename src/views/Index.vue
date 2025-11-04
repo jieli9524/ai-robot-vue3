@@ -1,7 +1,7 @@
 <template>
-    <div class="h-screen max-w-3xl mx-auto relative">
+    <div class="h-screen flex flex-col overflow-y-auto ref=chatContainer">
         <!-- 聊天记录区域 -->
-        <div class="overflow-y-auto pb-24 pt-4 px-4">
+        <div class="flex-1 max-w-3xl mx-auto pb-24 pt-4 px-4">
              <!-- 遍历聊天记录 -->
             <template v-for="(chat, index) in chatList" :key="index">
                 <!-- 用户提问消息（靠右） -->
@@ -28,7 +28,7 @@
         </div>
 
         <!-- 提问输入框 -->
-        <div class="absolute bottom-0 left-0 w-full mb-5 ">
+        <div class="sticky max-w-3xl mx-auto bg-white bottom-0 left-0 w-full">
             <div class="bg-gray-100 rounded-3xl px-4 py-3 mx-4 border border-gray-200 flex flex-col">
                 <textarea 
                     v-model="message" 
@@ -36,14 +36,17 @@
                     class="bg-transparent border-none outline-none w-full text-sm resize-none min-h-[24px]" 
                     rows="2"
                     @input="autoResize"
+                    @keydown.enter.prevent="sendMessage"
                     ref="textareaRef">
                 </textarea>
 
                 <!-- 发送按钮 -->
                 <div class="flex justify-end">
                     <button 
+                    :disabled="!message.trim()"
                     @click="sendMessage"
-                    class="flex items-center justify-center bg-[#4d6bfe] rounded-full w-8 h-8 border border-[#4d6bfe] hover:bg-[#3b5bef] transition-colors">
+                    class="flex items-center justify-center bg-[#4d6bfe] rounded-full w-8 h-8 border border-[#4d6bfe] hover:bg-[#3b5bef] transition-colors disabled:opacity-50
+                           disabled:cursor-not-allowed">
                         <SvgIcon name="up-arrow" customCss="w-5 h-5 text-white"></SvgIcon>
                     </button>
                 </div>
@@ -56,19 +59,39 @@
   <script setup>
   import SvgIcon from '@/components/SvgIcon.vue'
   import { ref, onBeforeUnmount } from 'vue';
+
+  // 聊天容器引用
+  const chatContainer = ref(null)
+
   // textarea 引用
   const textareaRef = ref(null);
    // 用户输入的消息
   const message = ref('');
 
+    // // 自动调整文本域高度
+    // const autoResize = () => {
+    // const textarea = textareaRef.value;
+    //     if (textarea) { // 若文本域存在
+    //         textarea.style.height = 'auto'; // 1. 先将高度重置为 'auto'
+    //         textarea.style.height = textarea.scrollHeight + 'px'; // 2. 再设置为内容的实际高度
+    //     } 
+    // };
+
     // 自动调整文本域高度
     const autoResize = () => {
-    const textarea = textareaRef.value;
-        if (textarea) { // 若文本域存在
-            textarea.style.height = 'auto'; // 1. 先将高度重置为 'auto'
-            textarea.style.height = textarea.scrollHeight + 'px'; // 2. 再设置为内容的实际高度
-        } 
-    };
+        const textarea = textareaRef.value;
+        if (textarea) {
+            // 重置高度以获取正确的滚动高度
+            textarea.style.height = 'auto'
+            
+            // 计算新高度，但最大不超过 300px
+            const newHeight = Math.min(textarea.scrollHeight, 300);
+            textarea.style.height = newHeight + 'px';
+            
+            // 如果内容超出 300px，则启用滚动
+            textarea.style.overflowY = textarea.scrollHeight > 300 ? 'auto' : 'hidden';
+        }
+    }
 
   // 聊天记录 (给个默认的问候语)
     const chatList = ref([
@@ -111,6 +134,9 @@
                     
                     // 更新最后一条消息
                     chatList.value[chatList.value.length - 1].content = responseText;
+
+                    // 滚动到底部
+                    scrollToBottom()
                 }
             }
 
@@ -126,11 +152,17 @@
                 
                 // 关闭 SSE
                 closeSSE()
+                
+                // 滚动到底部
+                scrollToBottom()
             }
         } catch (error) {
             console.error('发送消息错误: ', error)
             // 提示用户 “请求出错”
             chatList.value[chatList.value.length - 1].content = '抱歉，程序出错了，请稍后重试。';
+             
+            // 滚动到底部
+             scrollToBottom()
         }
     }
 
@@ -146,6 +178,19 @@
     onBeforeUnmount(() => {
     closeSSE()
     })
+
+    // 滚动到底部
+    const scrollToBottom = async () => {
+    await nextTick() // 等待 Vue.js 完成 DOM 更新
+    if (chatContainer.value) { // 若容器存在
+        // 将容器的滚动条位置设置到最底部
+        const container = chatContainer.value;
+        container.scrollTop = container.scrollHeight;
+    }
+    }
+
+    
+
   </script>
   
   <style scoped>
